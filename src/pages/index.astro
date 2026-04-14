@@ -1,0 +1,44 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const demos = [
+  {
+    href: '/particle',
+    title: 'Particle',
+    description: 'マウスに反応するパーティクルアート',
+    color: 'from-violet-500 to-indigo-500',
+  },
+  {
+    href: '/clock',
+    title: 'Clock',
+    description: 'タイムゾーン切り替え対応のアナログ時計',
+    color: 'from-emerald-500 to-teal-500',
+  },
+  {
+    href: '/noise',
+    title: 'Noise',
+    description: 'Perlin noise によるジェネラティブアート',
+    color: 'from-orange-500 to-pink-500',
+  },
+];
+---
+
+<Layout title="Demo Gallery">
+  <main class="min-h-screen flex flex-col items-center justify-center px-6 py-16">
+    <h1 class="text-4xl font-bold tracking-tight mb-2">Demo Gallery</h1>
+    <p class="text-zinc-400 mb-12 text-sm">Canvas / SVG / Generative Art</p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-3xl">
+      {demos.map((demo) => (
+        <a
+          href={demo.href}
+          class="group relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 p-6 hover:border-zinc-600 transition-colors"
+        >
+          <div class={`absolute inset-0 bg-gradient-to-br ${demo.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
+          <h2 class="text-xl font-semibold mb-1">{demo.title}</h2>
+          <p class="text-zinc-400 text-sm">{demo.description}</p>
+        </a>
+      ))}
+    </div>
+  </main>
+</Layout>
