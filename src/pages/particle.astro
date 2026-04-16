@@ -1,11 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <Layout title="Particle Art" description="Canvas 2D particle simulation">
   <main class="min-h-screen flex flex-col">
     <nav class="p-4">
-      <a href="/" class="text-zinc-400 hover:text-zinc-100 text-sm transition-colors">← Back</a>
+      <a href={`${base}/`} class="text-zinc-400 hover:text-zinc-100 text-sm transition-colors">← Back</a>
     </nav>
     <div class="flex-1 relative">
       <canvas id="canvas" class="w-full h-full block" />

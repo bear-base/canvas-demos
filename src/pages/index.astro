@@ -1,21 +1,23 @@
 ---
 import Layout from '../layouts/Layout.astro';
 
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 const demos = [
   {
-    href: '/particle',
+    href: `${base}/particle`,
     title: 'Particle',
     description: 'マウスに反応するパーティクルアート',
     color: 'from-violet-500 to-indigo-500',
   },
   {
-    href: '/clock',
+    href: `${base}/clock`,
     title: 'Clock',
     description: 'タイムゾーン切り替え対応のアナログ時計',
     color: 'from-emerald-500 to-teal-500',
   },
   {
-    href: '/noise',
+    href: `${base}/noise`,
     title: 'Noise',
     description: 'Perlin noise によるジェネラティブアート',
     color: 'from-orange-500 to-pink-500',
