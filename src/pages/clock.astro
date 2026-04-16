@@ -11,10 +11,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
     <!-- Clock SVG -->
     <svg id="clock" viewBox="-110 -110 220 220" class="w-64 h-64 sm:w-80 sm:h-80">
-      <!-- 外枠 -->
       <circle cx="0" cy="0" r="100" class="clock-face" fill="none" stroke-width="2" />
 
-      <!-- 時間目盛り -->
       {Array.from({ length: 12 }, (_, i) => {
         const angle = (i * 30 - 90) * (Math.PI / 180);
         const x1 = Math.cos(angle) * 88;
@@ -24,7 +22,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         return <line x1={x1} y1={y1} x2={x2} y2={y2} class="clock-tick" stroke-width="2" stroke-linecap="round" />;
       })}
 
-      <!-- 分目盛り -->
       {Array.from({ length: 60 }, (_, i) => {
         if (i % 5 === 0) return null;
         const angle = (i * 6 - 90) * (Math.PI / 180);
@@ -35,35 +32,26 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         return <line x1={x1} y1={y1} x2={x2} y2={y2} class="clock-tick-minor" stroke-width="1" stroke-linecap="round" />;
       })}
 
-      <!-- 時針 -->
-      <line id="hand-hour" x1="0" y1="0" x2="0" y2="-55"
-        class="clock-hand-hour" stroke-width="4" stroke-linecap="round" />
+      <line id="hand-hour"   x1="0" y1="0"  x2="0" y2="-55" class="clock-hand-hour"   stroke-width="4"   stroke-linecap="round" />
+      <line id="hand-minute" x1="0" y1="0"  x2="0" y2="-75" class="clock-hand-minute" stroke-width="2.5" stroke-linecap="round" />
+      <line id="hand-second" x1="0" y1="12" x2="0" y2="-82" class="clock-hand-second" stroke-width="1.5" stroke-linecap="round" />
 
-      <!-- 分針 -->
-      <line id="hand-minute" x1="0" y1="0" x2="0" y2="-75"
-        class="clock-hand-minute" stroke-width="2.5" stroke-linecap="round" />
-
-      <!-- 秒針 -->
-      <line id="hand-second" x1="0" y1="12" x2="0" y2="-82"
-        class="clock-hand-second" stroke-width="1.5" stroke-linecap="round" />
-
-      <!-- 中心点 -->
       <circle cx="0" cy="0" r="4" class="clock-center" />
-      <circle cx="0" cy="0" r="2" fill="#09090b" />
+      <circle cx="0" cy="0" r="2" class="clock-center-dot" />
     </svg>
 
     <!-- デジタル時刻 -->
     <div class="text-center">
-      <p id="digital" class="text-3xl font-mono tabular-nums text-zinc-100"></p>
-      <p id="date-label" class="text-sm text-zinc-400 mt-1"></p>
+      <p id="digital" class="text-3xl font-mono tabular-nums" style="color: var(--c-hand)"></p>
+      <p id="date-label" class="text-sm mt-1" style="color: var(--c-tick)"></p>
     </div>
 
     <!-- タイムゾーン選択 -->
     <div class="flex flex-wrap justify-center gap-2">
       {[
-        { label: 'Tokyo', tz: 'Asia/Tokyo' },
-        { label: 'London', tz: 'Europe/London' },
-        { label: 'New York', tz: 'America/New_York' },
+        { label: 'Tokyo',       tz: 'Asia/Tokyo' },
+        { label: 'London',      tz: 'Europe/London' },
+        { label: 'New York',    tz: 'America/New_York' },
         { label: 'Los Angeles', tz: 'America/Los_Angeles' },
       ].map(({ label, tz }) => (
         <button
@@ -74,27 +62,93 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         </button>
       ))}
     </div>
+
+    <!-- テーマ選択 -->
+    <div class="flex flex-wrap justify-center gap-2">
+      {[
+        { label: 'Dark',    id: 'dark' },
+        { label: 'Light',   id: 'light' },
+        { label: 'Neon',    id: 'neon' },
+        { label: 'Warm',    id: 'warm' },
+        { label: 'Mono',    id: 'mono' },
+      ].map(({ label, id }) => (
+        <button
+          data-theme={id}
+          class="theme-btn px-3 py-1.5 rounded-full text-sm border border-zinc-700 text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 transition-colors"
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   </main>
 </Layout>
 
 <style>
-  .clock-face      { stroke: #3f3f46; }
-  .clock-tick      { stroke: #71717a; }
-  .clock-tick-minor { stroke: #3f3f46; }
-  .clock-hand-hour   { stroke: #e4e4e7; }
-  .clock-hand-minute { stroke: #e4e4e7; }
-  .clock-hand-second { stroke: #f97316; }
-  .clock-center    { fill: #e4e4e7; }
-
-  @media (prefers-color-scheme: light) {
-    .clock-face      { stroke: #d4d4d8; }
-    .clock-tick      { stroke: #71717a; }
-    .clock-tick-minor { stroke: #d4d4d8; }
-    .clock-hand-hour   { stroke: #18181b; }
-    .clock-hand-minute { stroke: #18181b; }
-    .clock-hand-second { stroke: #ea580c; }
-    .clock-center    { fill: #18181b; }
+  /* --- テーマ CSS 変数 --- */
+  :root {
+    --c-face:   #3f3f46;
+    --c-tick:   #71717a;
+    --c-tick-m: #3f3f46;
+    --c-hand:   #e4e4e7;
+    --c-second: #f97316;
+    --c-center: #e4e4e7;
+    --c-dot:    #09090b;
+    --c-bg:     #09090b;
   }
+
+  [data-theme="light"] {
+    --c-face:   #d4d4d8;
+    --c-tick:   #52525b;
+    --c-tick-m: #d4d4d8;
+    --c-hand:   #18181b;
+    --c-second: #ea580c;
+    --c-center: #18181b;
+    --c-dot:    #ffffff;
+    --c-bg:     #f4f4f5;
+  }
+
+  [data-theme="neon"] {
+    --c-face:   #0e4429;
+    --c-tick:   #00ff88;
+    --c-tick-m: #006633;
+    --c-hand:   #00ffcc;
+    --c-second: #ff00ff;
+    --c-center: #00ffcc;
+    --c-dot:    #000000;
+    --c-bg:     #020d0a;
+  }
+
+  [data-theme="warm"] {
+    --c-face:   #78350f;
+    --c-tick:   #fbbf24;
+    --c-tick-m: #92400e;
+    --c-hand:   #fef3c7;
+    --c-second: #f87171;
+    --c-center: #fef3c7;
+    --c-dot:    #1c0a00;
+    --c-bg:     #1c0a00;
+  }
+
+  [data-theme="mono"] {
+    --c-face:   #555555;
+    --c-tick:   #aaaaaa;
+    --c-tick-m: #444444;
+    --c-hand:   #ffffff;
+    --c-second: #ffffff;
+    --c-center: #ffffff;
+    --c-dot:    #000000;
+    --c-bg:     #111111;
+  }
+
+  /* --- SVG への適用 --- */
+  main        { background-color: var(--c-bg); transition: background-color 0.3s; }
+  .clock-face       { stroke: var(--c-face); }
+  .clock-tick       { stroke: var(--c-tick); }
+  .clock-tick-minor { stroke: var(--c-tick-m); }
+  .clock-hand-hour, .clock-hand-minute { stroke: var(--c-hand); }
+  .clock-hand-second { stroke: var(--c-second); }
+  .clock-center      { fill: var(--c-center); }
+  .clock-center-dot  { fill: var(--c-dot); }
 </style>
 
 <script>
@@ -105,6 +159,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   const handSecond = document.getElementById('hand-second')!;
   const digital    = document.getElementById('digital')!;
   const dateLabel  = document.getElementById('date-label')!;
+  const main       = document.querySelector('main')!;
 
   function getTimeInZone(tz: string) {
     const now = new Date();
@@ -139,15 +194,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   function tick() {
     const { h, m, s } = getTimeInZone(timezone);
-    const secondDeg = s * 6;
-    const minuteDeg = m * 6 + s * 0.1;
-    const hourDeg   = h * 30 + m * 0.5;
-
-    setRotation(handSecond as HTMLElement, secondDeg);
-    setRotation(handMinute as HTMLElement, minuteDeg);
-    setRotation(handHour   as HTMLElement, hourDeg);
-
-    digital.textContent  = formatDigital(timezone);
+    setRotation(handSecond as HTMLElement, s * 6);
+    setRotation(handMinute as HTMLElement, m * 6 + s * 0.1);
+    setRotation(handHour   as HTMLElement, h * 30 + m * 0.5);
+    digital.textContent   = formatDigital(timezone);
     dateLabel.textContent = formatDate(timezone);
   }
 
@@ -160,6 +210,17 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       );
       btn.classList.add('border-zinc-100', 'text-zinc-100');
       tick();
+    });
+  });
+
+  // テーマボタン
+  document.querySelectorAll<HTMLButtonElement>('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      main.dataset.theme = btn.dataset.theme!;
+      document.querySelectorAll('.theme-btn').forEach(b =>
+        b.classList.remove('border-zinc-100', 'text-zinc-100')
+      );
+      btn.classList.add('border-zinc-100', 'text-zinc-100');
     });
   });
 
