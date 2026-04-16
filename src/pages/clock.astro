@@ -4,15 +4,165 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <Layout title="Clock" description="SVG analog clock with timezone support">
-  <main class="min-h-screen flex flex-col items-center justify-center gap-8">
+  <main class="min-h-screen flex flex-col items-center justify-center gap-8 px-4">
     <nav class="absolute top-4 left-4">
       <a href={`${base}/`} class="text-zinc-400 hover:text-zinc-100 text-sm transition-colors">← Back</a>
     </nav>
 
-    <svg id="clock" viewBox="-110 -110 220 220" class="w-64 h-64">
-      <!-- TODO: アナログ時計 SVG 実装 -->
-      <circle cx="0" cy="0" r="100" fill="none" stroke="#3f3f46" stroke-width="2" />
-      <text x="0" y="5" text-anchor="middle" fill="#a1a1aa" font-size="10" font-family="monospace">coming soon</text>
+    <!-- Clock SVG -->
+    <svg id="clock" viewBox="-110 -110 220 220" class="w-64 h-64 sm:w-80 sm:h-80">
+      <!-- 外枠 -->
+      <circle cx="0" cy="0" r="100" class="clock-face" fill="none" stroke-width="2" />
+
+      <!-- 時間目盛り -->
+      {Array.from({ length: 12 }, (_, i) => {
+        const angle = (i * 30 - 90) * (Math.PI / 180);
+        const x1 = Math.cos(angle) * 88;
+        const y1 = Math.sin(angle) * 88;
+        const x2 = Math.cos(angle) * 95;
+        const y2 = Math.sin(angle) * 95;
+        return <line x1={x1} y1={y1} x2={x2} y2={y2} class="clock-tick" stroke-width="2" stroke-linecap="round" />;
+      })}
+
+      <!-- 分目盛り -->
+      {Array.from({ length: 60 }, (_, i) => {
+        if (i % 5 === 0) return null;
+        const angle = (i * 6 - 90) * (Math.PI / 180);
+        const x1 = Math.cos(angle) * 91;
+        const y1 = Math.sin(angle) * 91;
+        const x2 = Math.cos(angle) * 95;
+        const y2 = Math.sin(angle) * 95;
+        return <line x1={x1} y1={y1} x2={x2} y2={y2} class="clock-tick-minor" stroke-width="1" stroke-linecap="round" />;
+      })}
+
+      <!-- 時針 -->
+      <line id="hand-hour" x1="0" y1="0" x2="0" y2="-55"
+        class="clock-hand-hour" stroke-width="4" stroke-linecap="round" />
+
+      <!-- 分針 -->
+      <line id="hand-minute" x1="0" y1="0" x2="0" y2="-75"
+        class="clock-hand-minute" stroke-width="2.5" stroke-linecap="round" />
+
+      <!-- 秒針 -->
+      <line id="hand-second" x1="0" y1="12" x2="0" y2="-82"
+        class="clock-hand-second" stroke-width="1.5" stroke-linecap="round" />
+
+      <!-- 中心点 -->
+      <circle cx="0" cy="0" r="4" class="clock-center" />
+      <circle cx="0" cy="0" r="2" fill="#09090b" />
     </svg>
+
+    <!-- デジタル時刻 -->
+    <div class="text-center">
+      <p id="digital" class="text-3xl font-mono tabular-nums text-zinc-100"></p>
+      <p id="date-label" class="text-sm text-zinc-400 mt-1"></p>
+    </div>
+
+    <!-- タイムゾーン選択 -->
+    <div class="flex flex-wrap justify-center gap-2">
+      {[
+        { label: 'Tokyo', tz: 'Asia/Tokyo' },
+        { label: 'London', tz: 'Europe/London' },
+        { label: 'New York', tz: 'America/New_York' },
+        { label: 'Los Angeles', tz: 'America/Los_Angeles' },
+      ].map(({ label, tz }) => (
+        <button
+          data-tz={tz}
+          class="tz-btn px-3 py-1.5 rounded-full text-sm border border-zinc-700 text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 transition-colors"
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   </main>
 </Layout>
+
+<style>
+  .clock-face      { stroke: #3f3f46; }
+  .clock-tick      { stroke: #71717a; }
+  .clock-tick-minor { stroke: #3f3f46; }
+  .clock-hand-hour   { stroke: #e4e4e7; }
+  .clock-hand-minute { stroke: #e4e4e7; }
+  .clock-hand-second { stroke: #f97316; }
+  .clock-center    { fill: #e4e4e7; }
+
+  @media (prefers-color-scheme: light) {
+    .clock-face      { stroke: #d4d4d8; }
+    .clock-tick      { stroke: #71717a; }
+    .clock-tick-minor { stroke: #d4d4d8; }
+    .clock-hand-hour   { stroke: #18181b; }
+    .clock-hand-minute { stroke: #18181b; }
+    .clock-hand-second { stroke: #ea580c; }
+    .clock-center    { fill: #18181b; }
+  }
+</style>
+
+<script>
+  let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const handHour   = document.getElementById('hand-hour')!;
+  const handMinute = document.getElementById('hand-minute')!;
+  const handSecond = document.getElementById('hand-second')!;
+  const digital    = document.getElementById('digital')!;
+  const dateLabel  = document.getElementById('date-label')!;
+
+  function getTimeInZone(tz: string) {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: 'numeric', minute: 'numeric', second: 'numeric',
+      hour12: false,
+    }).formatToParts(now);
+
+    const get = (type: string) => parseInt(parts.find(p => p.type === type)?.value ?? '0');
+    return { h: get('hour') % 12, m: get('minute'), s: get('second') };
+  }
+
+  function formatDigital(tz: string) {
+    return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: tz,
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    }).format(new Date());
+  }
+
+  function formatDate(tz: string) {
+    return new Intl.DateTimeFormat('ja-JP', {
+      timeZone: tz,
+      year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
+    }).format(new Date());
+  }
+
+  function setRotation(el: HTMLElement, deg: number) {
+    el.setAttribute('transform', `rotate(${deg})`);
+  }
+
+  function tick() {
+    const { h, m, s } = getTimeInZone(timezone);
+    const secondDeg = s * 6;
+    const minuteDeg = m * 6 + s * 0.1;
+    const hourDeg   = h * 30 + m * 0.5;
+
+    setRotation(handSecond as HTMLElement, secondDeg);
+    setRotation(handMinute as HTMLElement, minuteDeg);
+    setRotation(handHour   as HTMLElement, hourDeg);
+
+    digital.textContent  = formatDigital(timezone);
+    dateLabel.textContent = formatDate(timezone);
+  }
+
+  // タイムゾーンボタン
+  document.querySelectorAll<HTMLButtonElement>('.tz-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      timezone = btn.dataset.tz!;
+      document.querySelectorAll('.tz-btn').forEach(b =>
+        b.classList.remove('border-zinc-100', 'text-zinc-100')
+      );
+      btn.classList.add('border-zinc-100', 'text-zinc-100');
+      tick();
+    });
+  });
+
+  tick();
+  setInterval(tick, 1000);
+</script>
