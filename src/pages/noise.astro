@@ -4,32 +4,232 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <Layout title="Noise Art" description="Perlin noise generative art">
-  <main class="min-h-screen flex flex-col">
-    <nav class="p-4">
-      <a href={`${base}/`} class="text-zinc-400 hover:text-zinc-100 text-sm transition-colors">← Back</a>
-    </nav>
-    <div class="flex-1 relative">
-      <canvas id="canvas" class="w-full h-full block" />
+  <main class="relative min-h-screen bg-black overflow-hidden">
+    <canvas id="canvas" class="absolute inset-0 w-full h-full" />
+
+    <!-- UI オーバーレイ -->
+    <div class="absolute top-0 left-0 right-0 flex items-start justify-between p-4 pointer-events-none">
+      <nav class="pointer-events-auto">
+        <a href={`${base}/`} class="text-white/50 hover:text-white text-sm transition-colors">← Back</a>
+      </nav>
+    </div>
+
+    <!-- コントロールパネル -->
+    <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6">
+      <div class="mx-auto max-w-lg bg-black/60 backdrop-blur-sm border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Scale</span>
+              <span id="val-scale" class="text-white/80">4</span>
+            </span>
+            <input id="sl-scale" type="range" min="1" max="20" value="4" step="0.5" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Speed</span>
+              <span id="val-speed" class="text-white/80">0.5</span>
+            </span>
+            <input id="sl-speed" type="range" min="0" max="3" value="0.5" step="0.05" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Hue</span>
+              <span id="val-hue" class="text-white/80">200</span>
+            </span>
+            <input id="sl-hue" type="range" min="0" max="360" value="200" step="1" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Pixel size</span>
+              <span id="val-pixel" class="text-white/80">3</span>
+            </span>
+            <input id="sl-pixel" type="range" min="1" max="10" value="3" step="1" class="slider" />
+          </label>
+
+        </div>
+
+        <button id="btn-reseed" class="w-full py-1.5 rounded-lg border border-white/20 text-white/60 hover:text-white hover:border-white/50 text-sm transition-colors">
+          Reseed
+        </button>
+      </div>
     </div>
   </main>
 </Layout>
 
+<style>
+  .slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    outline: none;
+    cursor: pointer;
+  }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+  }
+  .slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    cursor: pointer;
+  }
+</style>
+
 <script>
-  // TODO: Perlin noise 実装
-  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
-  const ctx = canvas.getContext('2d')!;
+  // ---- Perlin noise ----
+  function buildPerm(seed: number): Uint8Array {
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    // seeded shuffle (mulberry32 based)
+    let s = seed >>> 0;
+    const rand = () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t ^= t + Math.imul(t ^ t >>> 7, 61 | t); return ((t ^ t >>> 14) >>> 0) / 0x100000000; };
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [p[i], p[j]] = [p[j]!, p[i]!];
+    }
+    const perm = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) perm[i] = p[i & 255]!;
+    return perm;
+  }
+
+  function fade(t: number) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a: number, b: number, t: number) { return a + t * (b - a); }
+  function grad2(h: number, x: number, y: number) {
+    const g = h & 3;
+    const u = g < 2 ? x : y;
+    const v = g < 2 ? y : x;
+    return ((g & 1) ? -u : u) + ((g & 2) ? -v : v);
+  }
+
+  function makeNoise(perm: Uint8Array) {
+    return function noise(x: number, y: number): number {
+      const X = Math.floor(x) & 255;
+      const Y = Math.floor(y) & 255;
+      x -= Math.floor(x);
+      y -= Math.floor(y);
+      const u = fade(x);
+      const v = fade(y);
+      const a  = (perm[X]!  + Y) & 255;
+      const b  = (perm[X+1]! + Y) & 255;
+      return lerp(
+        lerp(grad2(perm[a]!,   x,     y    ), grad2(perm[b]!,   x - 1, y    ), u),
+        lerp(grad2(perm[a+1]!, x,     y - 1), grad2(perm[b+1]!, x - 1, y - 1), u),
+        v
+      ) * 0.5 + 0.5; // 0〜1 に正規化
+    };
+  }
+
+  // ---- セットアップ ----
+  const canvas  = document.getElementById('canvas') as HTMLCanvasElement;
+  const ctx     = canvas.getContext('2d')!;
+
+  let perm  = buildPerm(Date.now());
+  let noise = makeNoise(perm);
+  let time  = 0;
+  let animId = 0;
+
+  // パラメータ
+  let scale     = 4;
+  let speed     = 0.5;
+  let hue       = 200;
+  let pixelSize = 3;
 
   function resize() {
-    canvas.width = canvas.offsetWidth;
+    canvas.width  = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
   }
   window.addEventListener('resize', resize);
   resize();
 
-  ctx.fillStyle = '#09090b';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#a1a1aa';
-  ctx.font = '14px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('Noise — coming soon', canvas.width / 2, canvas.height / 2);
+  // ---- 描画 ----
+  function draw() {
+    const w = canvas.width;
+    const h = canvas.height;
+    const img = ctx.createImageData(w, h);
+    const data = img.data;
+    const ps = pixelSize;
+
+    for (let py = 0; py < h; py += ps) {
+      for (let px = 0; px < w; px += ps) {
+        const nx = px / w * scale;
+        const ny = py / h * scale;
+        const n  = noise(nx + time, ny + time * 0.7);
+        const n2 = noise(nx * 2 + time * 1.3, ny * 2);
+
+        const h2 = (hue + n * 80 + n2 * 40) % 360;
+        const s2 = 70 + n2 * 30;
+        const l  = 20 + n * 55;
+
+        // HSL → RGB
+        const [r, g, b] = hslToRgb(h2 / 360, s2 / 100, l / 100);
+
+        // ブロック塗り
+        for (let dy = 0; dy < ps && py + dy < h; dy++) {
+          for (let dx = 0; dx < ps && px + dx < w; dx++) {
+            const i = ((py + dy) * w + (px + dx)) * 4;
+            data[i]     = r;
+            data[i + 1] = g;
+            data[i + 2] = b;
+            data[i + 3] = 255;
+          }
+        }
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+    time += speed * 0.005;
+    animId = requestAnimationFrame(draw);
+  }
+
+  function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+    const a = s * Math.min(l, 1 - l);
+    const f = (n: number) => {
+      const k = (n + h * 12) % 12;
+      return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    };
+    return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+  }
+
+  draw();
+
+  // ---- スライダー ----
+  function bind(id: string, valId: string, setter: (v: number) => void) {
+    const el = document.getElementById(id) as HTMLInputElement;
+    const vl = document.getElementById(valId)!;
+    el.addEventListener('input', () => {
+      const v = parseFloat(el.value);
+      vl.textContent = String(v);
+      setter(v);
+    });
+  }
+
+  bind('sl-scale', 'val-scale', v => scale = v);
+  bind('sl-speed', 'val-speed', v => speed = v);
+  bind('sl-hue',   'val-hue',   v => hue   = v);
+  bind('sl-pixel', 'val-pixel', v => pixelSize = v);
+
+  // ---- Reseed ----
+  document.getElementById('btn-reseed')!.addEventListener('click', () => {
+    cancelAnimationFrame(animId);
+    perm  = buildPerm(Date.now());
+    noise = makeNoise(perm);
+    time  = 0;
+    draw();
+  });
 </script>
