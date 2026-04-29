@@ -4,32 +4,279 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <Layout title="Particle Art" description="Canvas 2D particle simulation">
-  <main class="min-h-screen flex flex-col">
-    <nav class="p-4">
+  <main class="min-h-screen bg-zinc-950 flex flex-col px-4 py-6 gap-6">
+    <nav>
       <a href={`${base}/`} class="text-zinc-400 hover:text-zinc-100 text-sm transition-colors">← Back</a>
     </nav>
-    <div class="flex-1 relative">
-      <canvas id="canvas" class="w-full h-full block" />
+
+    <!-- キャンバス -->
+    <div class="flex justify-center">
+      <canvas id="canvas" class="rounded-xl border border-white/10" width="480" height="480" style="max-width: 100%;" />
+    </div>
+
+    <!-- コントロールパネル -->
+    <div class="mx-auto w-full max-w-lg">
+      <div class="bg-zinc-900 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Particles</span>
+              <span id="val-count" class="text-white/80">400</span>
+            </span>
+            <input id="sl-count" type="range" min="50" max="1200" value="400" step="50" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Speed</span>
+              <span id="val-speed" class="text-white/80">1.0</span>
+            </span>
+            <input id="sl-speed" type="range" min="0.1" max="3" value="1.0" step="0.1" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Trail</span>
+              <span id="val-trail" class="text-white/80">0.08</span>
+            </span>
+            <input id="sl-trail" type="range" min="0.01" max="0.5" value="0.08" step="0.01" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Mouse radius</span>
+              <span id="val-radius" class="text-white/80">80</span>
+            </span>
+            <input id="sl-radius" type="range" min="20" max="200" value="80" step="10" class="slider" />
+          </label>
+
+        </div>
+
+        <!-- マウスモード -->
+        <div class="flex gap-2">
+          <button data-mode="repel" class="mode-btn active-btn flex-1 py-1.5 rounded-lg border text-sm transition-colors">Repel</button>
+          <button data-mode="attract" class="mode-btn flex-1 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 text-sm transition-colors">Attract</button>
+          <button data-mode="none" class="mode-btn flex-1 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 text-sm transition-colors">Off</button>
+        </div>
+      </div>
     </div>
   </main>
 </Layout>
 
+<style>
+  .slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    outline: none;
+    cursor: pointer;
+  }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+  }
+  .slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    cursor: pointer;
+  }
+  .active-btn {
+    border-color: rgba(255,255,255,0.6);
+    color: white;
+  }
+</style>
+
 <script>
-  // TODO: パーティクルシミュレーション実装
+  // ---- Perlin noise (2D) ----
+  const perm = (() => {
+    const p = Array.from({ length: 256 }, (_, i) => i);
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [p[i], p[j]] = [p[j]!, p[i]!];
+    }
+    const out = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) out[i] = p[i & 255]!;
+    return out;
+  })();
+
+  function fade(t: number) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a: number, b: number, t: number) { return a + t * (b - a); }
+  function grad2(h: number, x: number, y: number) {
+    const g = h & 3;
+    return ((g & 1) ? -x : x) + ((g & 2) ? -y : y);
+  }
+  function noise(x: number, y: number): number {
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+    x -= Math.floor(x); y -= Math.floor(y);
+    const u = fade(x), v = fade(y);
+    const a = (perm[X]! + Y) & 255, b = (perm[X + 1]! + Y) & 255;
+    return lerp(
+      lerp(grad2(perm[a]!, x, y),     grad2(perm[b]!, x - 1, y),     u),
+      lerp(grad2(perm[a+1]!, x, y-1), grad2(perm[b+1]!, x-1, y-1), u),
+      v
+    );
+  }
+
+  // ---- パーティクル ----
+  const W = 480, H = 480;
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
   const ctx = canvas.getContext('2d')!;
 
-  function resize() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+  let particleCount = 400;
+  let speed    = 1.0;
+  let trail    = 0.08;
+  let radius   = 80;
+  let mouseMode: 'repel' | 'attract' | 'none' = 'repel';
+  let time = 0;
+
+  let mouse = { x: -9999, y: -9999, active: false };
+
+  // DPRを考慮したマウス座標取換算
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    mouse.x = (e.clientX - rect.left) * scaleX;
+    mouse.y = (e.clientY - rect.top)  * scaleY;
+    mouse.active = true;
+  });
+  canvas.addEventListener('mouseleave', () => { mouse.active = false; });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    const t = e.touches[0]!;
+    mouse.x = (t.clientX - rect.left) * scaleX;
+    mouse.y = (t.clientY - rect.top)  * scaleY;
+    mouse.active = true;
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => { mouse.active = false; });
+
+  type Particle = { x: number; y: number; vx: number; vy: number; hue: number };
+
+  function makeParticle(): Particle {
+    return { x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0, hue: Math.random() * 360 };
   }
-  window.addEventListener('resize', resize);
-  resize();
+
+  let particles: Particle[] = Array.from({ length: particleCount }, makeParticle);
+
+  function updateParticles() {
+    const scale = 0.003;
+    for (const p of particles) {
+      // フローフィールド: noiseから角度を取得
+      const angle = noise(p.x * scale + time, p.y * scale) * Math.PI * 4;
+      p.vx += Math.cos(angle) * 0.08 * speed;
+      p.vy += Math.sin(angle) * 0.08 * speed;
+
+      // マウス相互作用
+      if (mouse.active && mouseMode !== 'none') {
+        const dx = p.x - mouse.x;
+        const dy = p.y - mouse.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < radius && dist > 0.5) {
+          const force = ((radius - dist) / radius) * 1.5;
+          const sign  = mouseMode === 'repel' ? 1 : -1;
+          p.vx += (dx / dist) * force * sign;
+          p.vy += (dy / dist) * force * sign;
+        }
+      }
+
+      // 速度上限 & 減衰
+      const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const maxSpd = 2.5 * speed;
+      if (spd > maxSpd) { p.vx = p.vx / spd * maxSpd; p.vy = p.vy / spd * maxSpd; }
+      p.vx *= 0.97;
+      p.vy *= 0.97;
+
+      p.x += p.vx;
+      p.y += p.vy;
+
+      // 端で折り返し
+      if (p.x < 0) p.x += W;
+      if (p.x > W) p.x -= W;
+      if (p.y < 0) p.y += H;
+      if (p.y > H) p.y -= H;
+
+      p.hue = (p.hue + spd * 0.4) % 360;
+    }
+  }
+
+  function drawParticles() {
+    // トレイル: 半透明の黒で上書き
+    ctx.fillStyle = `rgba(9,9,11,${trail})`;
+    ctx.fillRect(0, 0, W, H);
+
+    for (const p of particles) {
+      const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const l = Math.min(40 + spd * 10, 75);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${p.hue},80%,${l}%)`;
+      ctx.fill();
+    }
+
+    // マウス位置のリング表示
+    if (mouse.active && mouseMode !== 'none') {
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  function loop() {
+    updateParticles();
+    drawParticles();
+    time += 0.003;
+    requestAnimationFrame(loop);
+  }
 
   ctx.fillStyle = '#09090b';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#a1a1aa';
-  ctx.font = '14px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('Particle — coming soon', canvas.width / 2, canvas.height / 2);
+  ctx.fillRect(0, 0, W, H);
+  loop();
+
+  // ---- コントロール ----
+  function bind(id: string, valId: string, setter: (v: number) => void) {
+    const el = document.getElementById(id) as HTMLInputElement;
+    const vl = document.getElementById(valId)!;
+    el.addEventListener('input', () => {
+      const v = parseFloat(el.value);
+      vl.textContent = String(v);
+      setter(v);
+    });
+  }
+
+  bind('sl-speed',  'val-speed',  v => speed  = v);
+  bind('sl-trail',  'val-trail',  v => trail  = v);
+  bind('sl-radius', 'val-radius', v => radius = v);
+  bind('sl-count',  'val-count',  v => {
+    particleCount = v;
+    if (v > particles.length) {
+      while (particles.length < v) particles.push(makeParticle());
+    } else {
+      particles = particles.slice(0, v);
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      mouseMode = btn.dataset.mode as typeof mouseMode;
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active-btn'));
+      btn.classList.add('active-btn');
+    });
+  });
 </script>
