@@ -1,0 +1,282 @@
+---
+import Layout from '../layouts/Layout.astro';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<Layout title="Gravity" description="N-body gravity simulation">
+  <main class="min-h-screen bg-zinc-950 flex flex-col px-4 py-6 gap-6">
+    <nav>
+      <a href={`${base}/`} class="text-zinc-400 hover:text-zinc-100 text-sm transition-colors">← Back</a>
+    </nav>
+
+    <!-- キャンバス -->
+    <div class="flex justify-center">
+      <canvas
+        id="canvas"
+        class="rounded-xl border border-white/10 cursor-crosshair"
+        width="480" height="480"
+        style="max-width: 100%;"
+        title="クリックで天体を追加"
+      />
+    </div>
+
+    <!-- コントロールパネル -->
+    <div class="mx-auto w-full max-w-lg">
+      <div class="bg-zinc-900 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Gravity (G)</span>
+              <span id="val-g" class="text-white/80">400</span>
+            </span>
+            <input id="sl-g" type="range" min="50" max="1200" value="400" step="50" class="slider" />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-white/50 flex justify-between">
+              <span>Trail</span>
+              <span id="val-trail" class="text-white/80">80</span>
+            </span>
+            <input id="sl-trail" type="range" min="10" max="300" value="80" step="10" class="slider" />
+          </label>
+
+        </div>
+
+        <p class="text-xs text-white/30 text-center">クリックで天体を追加 / 天体同士が近づくと合体します</p>
+
+        <div class="flex gap-2">
+          <button id="btn-reset" class="flex-1 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 text-sm transition-colors">Reset</button>
+          <button id="btn-add" class="flex-1 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-400 hover:text-zinc-100 text-sm transition-colors">Add random</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    outline: none;
+    cursor: pointer;
+  }
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+  }
+  .slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    border: none;
+    cursor: pointer;
+  }
+</style>
+
+<script>
+  const W = 480, H = 480;
+  const canvas = document.getElementById('canvas') as HTMLCanvasElement;
+  const ctx    = canvas.getContext('2d')!;
+
+  type Body = {
+    x: number; y: number;
+    vx: number; vy: number;
+    mass: number;
+    hue: number;
+    trail: { x: number; y: number }[];
+  };
+
+  let G         = 400;
+  let maxTrail  = 80;
+
+  function radius(mass: number) { return Math.max(3, Math.sqrt(mass) * 1.8); }
+
+  function makeBody(x: number, y: number, vx: number, vy: number, mass: number): Body {
+    return { x, y, vx, vy, mass, hue: Math.random() * 360, trail: [] };
+  }
+
+  // 初期状態: 中央の重い天体 + 周回する軽い天体
+  function initialBodies(): Body[] {
+    const cx = W / 2, cy = H / 2;
+    const sun = makeBody(cx, cy, 0, 0, 120);
+    sun.hue = 45;
+
+    const bodies: Body[] = [sun];
+    const orbits = [
+      { r: 110, mass: 12 },
+      { r: 160, mass: 8 },
+      { r: 70,  mass: 5 },
+    ];
+    for (const { r, mass } of orbits) {
+      const angle = Math.random() * Math.PI * 2;
+      const px = cx + Math.cos(angle) * r;
+      const py = cy + Math.sin(angle) * r;
+      // 円軌道速度 v = sqrt(G * M / r)
+      const v = Math.sqrt(G * sun.mass / r);
+      const vx = -Math.sin(angle) * v;
+      const vy =  Math.cos(angle) * v;
+      bodies.push(makeBody(px, py, vx, vy, mass));
+    }
+    return bodies;
+  }
+
+  let bodies = initialBodies();
+
+  // ---- 物理シミュレーション ----
+  function step(dt: number) {
+    const len = bodies.length;
+
+    // 加速度を計算
+    const ax = new Float64Array(len);
+    const ay = new Float64Array(len);
+
+    for (let i = 0; i < len; i++) {
+      for (let j = i + 1; j < len; j++) {
+        const a = bodies[i]!, b = bodies[j]!;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist2 = dx * dx + dy * dy;
+        const soft  = 8; // ソフトニング（ゼロ除算防止）
+        const d     = Math.sqrt(dist2 + soft * soft);
+        const f     = G / (d * d * d);
+        ax[i]! += f * b.mass * dx;
+        ay[i]! += f * b.mass * dy;
+        ax[j]! -= f * a.mass * dx;
+        ay[j]! -= f * a.mass * dy;
+      }
+    }
+
+    // 位置・速度を更新 & トレイル記録
+    for (let i = 0; i < len; i++) {
+      const b = bodies[i]!;
+      b.vx += ax[i]! * dt;
+      b.vy += ay[i]! * dt;
+      b.x  += b.vx * dt;
+      b.y  += b.vy * dt;
+      b.trail.push({ x: b.x, y: b.y });
+      if (b.trail.length > maxTrail) b.trail.shift();
+    }
+
+    // 衝突判定: 近い天体を合体
+    const merged = new Set<number>();
+    for (let i = 0; i < len; i++) {
+      if (merged.has(i)) continue;
+      for (let j = i + 1; j < len; j++) {
+        if (merged.has(j)) continue;
+        const a = bodies[i]!, b = bodies[j]!;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < radius(a.mass) + radius(b.mass)) {
+          // 運動量保存で合体
+          const totalMass = a.mass + b.mass;
+          a.x  = (a.x  * a.mass + b.x  * b.mass) / totalMass;
+          a.y  = (a.y  * a.mass + b.y  * b.mass) / totalMass;
+          a.vx = (a.vx * a.mass + b.vx * b.mass) / totalMass;
+          a.vy = (a.vy * a.mass + b.vy * b.mass) / totalMass;
+          a.mass = totalMass;
+          merged.add(j);
+        }
+      }
+    }
+    if (merged.size > 0) {
+      bodies = bodies.filter((_, i) => !merged.has(i));
+    }
+
+    // 画面外に遠く出た天体を除去
+    bodies = bodies.filter(b => b.x > -W && b.x < W * 2 && b.y > -H && b.y < H * 2);
+  }
+
+  // ---- 描画 ----
+  function draw() {
+    ctx.fillStyle = 'rgba(9,9,11,0.18)';
+    ctx.fillRect(0, 0, W, H);
+
+    for (const body of bodies) {
+      // トレイル
+      if (body.trail.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(body.trail[0]!.x, body.trail[0]!.y);
+        for (let i = 1; i < body.trail.length; i++) {
+          ctx.lineTo(body.trail[i]!.x, body.trail[i]!.y);
+        }
+        ctx.strokeStyle = `hsla(${body.hue},80%,60%,0.35)`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // 天体本体
+      const r = radius(body.mass);
+      const grad = ctx.createRadialGradient(body.x, body.y, 0, body.x, body.y, r);
+      grad.addColorStop(0, `hsl(${body.hue},90%,85%)`);
+      grad.addColorStop(1, `hsl(${body.hue},80%,45%)`);
+      ctx.beginPath();
+      ctx.arc(body.x, body.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+  }
+
+  // ---- メインループ ----
+  const DT = 1 / 60;
+  function loop() {
+    step(DT);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  ctx.fillStyle = '#09090b';
+  ctx.fillRect(0, 0, W, H);
+  loop();
+
+  // ---- クリックで天体追加 ----
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = W / rect.width, sy = H / rect.height;
+    const x = (e.clientX - rect.left) * sx;
+    const y = (e.clientY - rect.top)  * sy;
+    const mass = 8 + Math.random() * 20;
+    // ランダムな初速
+    const speed = 0.5 + Math.random() * 1.5;
+    const angle = Math.random() * Math.PI * 2;
+    bodies.push(makeBody(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, mass));
+  });
+
+  // ---- コントロール ----
+  function bind(id: string, valId: string, setter: (v: number) => void) {
+    const el = document.getElementById(id) as HTMLInputElement;
+    const vl = document.getElementById(valId)!;
+    el.addEventListener('input', () => {
+      const v = parseFloat(el.value);
+      vl.textContent = String(v);
+      setter(v);
+    });
+  }
+
+  bind('sl-g',     'val-g',     v => G = v);
+  bind('sl-trail', 'val-trail', v => maxTrail = v);
+
+  document.getElementById('btn-reset')!.addEventListener('click', () => {
+    bodies = initialBodies();
+  });
+
+  document.getElementById('btn-add')!.addEventListener('click', () => {
+    const margin = 40;
+    const x = margin + Math.random() * (W - margin * 2);
+    const y = margin + Math.random() * (H - margin * 2);
+    const mass = 8 + Math.random() * 25;
+    const speed = Math.random() * 2;
+    const angle = Math.random() * Math.PI * 2;
+    bodies.push(makeBody(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, mass));
+  });
+</script>
