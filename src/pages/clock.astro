@@ -44,6 +44,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     <div class="text-center">
       <p id="digital" class="text-3xl font-mono tabular-nums" style="color: var(--c-hand)"></p>
       <p id="date-label" class="text-sm mt-1" style="color: var(--c-tick)"></p>
+      <p id="offset-label" class="text-xs mt-2 font-mono" style="color: var(--c-tick)"></p>
     </div>
 
     <!-- タイムゾーン選択 -->
@@ -153,13 +154,32 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 <script>
   let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const systemTz = timezone;
 
-  const handHour   = document.getElementById('hand-hour')!;
-  const handMinute = document.getElementById('hand-minute')!;
-  const handSecond = document.getElementById('hand-second')!;
-  const digital    = document.getElementById('digital')!;
-  const dateLabel  = document.getElementById('date-label')!;
-  const main       = document.querySelector('main')!;
+  const handHour    = document.getElementById('hand-hour')!;
+  const handMinute  = document.getElementById('hand-minute')!;
+  const handSecond  = document.getElementById('hand-second')!;
+  const digital     = document.getElementById('digital')!;
+  const dateLabel   = document.getElementById('date-label')!;
+  const offsetLabel = document.getElementById('offset-label')!;
+  const main        = document.querySelector('main')!;
+
+  function getUtcOffsetMinutes(tz: string): number {
+    const now = new Date();
+    const utc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds());
+    const local = new Date(now.toLocaleString('en-US', { timeZone: tz })).getTime();
+    return Math.round((local - new Date(now.toLocaleString('en-US', { timeZone: 'UTC' })).getTime()) / 60000);
+  }
+
+  function formatOffset(diffMin: number): string {
+    if (diffMin === 0) return 'システム時刻と同じ';
+    const sign = diffMin > 0 ? '+' : '-';
+    const abs  = Math.abs(diffMin);
+    const h    = Math.floor(abs / 60);
+    const m    = abs % 60;
+    const label = m === 0 ? `${h}h` : `${h}h ${m}m`;
+    return `システム時刻より ${sign}${label}`;
+  }
 
   function getTimeInZone(tz: string) {
     const now = new Date();
@@ -199,6 +219,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     setRotation(handHour   as HTMLElement, h * 30 + m * 0.5);
     digital.textContent   = formatDigital(timezone);
     dateLabel.textContent = formatDate(timezone);
+
+    const diffMin = getUtcOffsetMinutes(timezone) - getUtcOffsetMinutes(systemTz);
+    offsetLabel.textContent = formatOffset(diffMin);
   }
 
   // タイムゾーンボタン
